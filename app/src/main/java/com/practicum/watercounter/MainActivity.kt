@@ -36,15 +36,34 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun WaterCounterApp() {
+    val context = LocalContext.current
+
+    val prefsManager = remember { PreferencesManager(context) }
     // 👇 САМАЯ ВАЖНАЯ СТРОКА - состояние приложения
     // 'count' - текущее значение (сколько стаканов)
     // 'setCount' - функция для изменения этого значения
-    var count by remember { mutableStateOf(0) }
+    var count by remember { mutableStateOf(prefsManager.getWaterCount()) }
 
     // Цель на день
-    val dailyGoal = 10
+    var dailyGoal by remember { mutableStateOf(prefsManager.getDailyGoal()) }
 
-    val context = LocalContext.current
+    // Проверяем, не наступил ли новый день
+    LaunchedEffect(Unit) {
+        prefsManager.resetIfNewDay()
+        count = prefsManager.getWaterCount()
+    }
+
+    // Функция для обновления счётчика
+    fun updateCount(newCount: Int) {
+        count = newCount
+        prefsManager.saveWaterCount(newCount)
+    }
+
+    // Функция для обновления цели
+    fun updateGoal(newGoal: Int) {
+        dailyGoal = newGoal
+        prefsManager.saveDailyGoal(newGoal)
+    }
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -106,7 +125,7 @@ fun WaterCounterApp() {
                 // Кнопка Добавить
                 Button(
                     onClick = {
-                        count++
+                        updateCount( count + 1 )
                         vibrate(context, 50) // Вибрация 50 мс
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -119,10 +138,12 @@ fun WaterCounterApp() {
                     )
                 }
 
+                // Card
+
                 // Кнопка +2 стакана
                 Button(
                     onClick = {
-                        count += 2
+                        updateCount( count + 2)
                         vibrate(context, 100) // Более длинная вибрация
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -139,7 +160,7 @@ fun WaterCounterApp() {
                 Button(
                     onClick = {
                         if (count > 0) {
-                            count--
+                            updateCount(count - 1)
                             vibrate(context, 30) // Короткая вибрация
                         }
                     },
@@ -154,28 +175,116 @@ fun WaterCounterApp() {
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(30.dp))
 
-            // Кнопка сброса
-            OutlinedButton(
-                onClick = { count = 0 } // возвразщаем к 0
+            // Панель настройки цели - чисто функциональная
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Сбросить за день")
+                Text(
+                    text = "🎯 Настройка цели:",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Кнопка уменьшения цели
+                    IconButton(
+                        onClick = {
+                            if (dailyGoal > 1) updateGoal(dailyGoal - 1)
+                        }
+                    ) {
+                        Text("➖", fontSize = 20.sp)
+                    }
+
+                    // Текущая цель
+                    Text(
+                        text = "$dailyGoal",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Кнопка увеличения цели
+                    IconButton(
+                        onClick = { updateGoal(dailyGoal + 1) }
+                    ) {
+                        Text("➕", fontSize = 20.sp)
+                    }
+                }
             }
 
-            // Подсказка внизу
+            Spacer(modifier = Modifier.height(30.dp))
+
+            // Кнопки сброса - чистый функционал
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Кнопка сброса счётчика
+                OutlinedButton(
+                    onClick = {
+                        updateCount(0)
+                        vibrate(context, 100)
+                    }
+                ) {
+                    Text("🔄 Сбросить счётчик")
+                }
+
+                // Кнопка сброса цели
+                OutlinedButton(
+                    onClick = {
+                        updateGoal(10)
+                    }
+                ) {
+                    Text("🎯 Цель: 10")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            // Только мотивационные сообщения
             Text(
                 text = when {
                     count == 0 -> "Начни день со стакана воды! 🌅"
                     count < dailyGoal / 2 -> "Так держать! Продолжай! 💪"
                     count in dailyGoal..(dailyGoal + 2) -> "Отлично! Цель достигнута! 🎉"
                     count > dailyGoal + 2 -> "Ты сегодня чемпион! 🏆"
-                    else -> "Всего ${dailyGoal - count} стакана до цели! Ты сможешь!"
+                    else -> "Всего ${dailyGoal - count} стаканов до цели!"
                 },
                 fontSize = 16.sp,
-                modifier = Modifier.padding(top = 40.dp),
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
             )
+
+            // Визуальный разделитель
+            Spacer(modifier = Modifier.height(30.dp))
+
+            // Простая информация о прогрессе
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Прогресс:",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = "${((count.toFloat() / dailyGoal) * 100).toInt()}%",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
     }
 }
